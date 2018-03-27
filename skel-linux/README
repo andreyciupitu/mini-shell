@@ -1,0 +1,43 @@
+Tema #2 SO - Linux - mini-shell
+Ciupitu Andrei Valentin
+332CC
+
+========================== Detalii de implementare ============================
+
+Comenzile simple:
+	- Am creat un proces nou foloind fork in care am executat comanda. Am
+	folosit functiile get_word si get_args pentru obtinerea comenzii si a
+	argumentelor.
+	- Daca apelul exec esueaza se iese din program cu un cod de eroare.
+	- Mesajul de eroare este printat cu fprintf la stderr.
+
+Comenzi interne:
+	- Pentru comanda cd se salveaza mai intai descriptorii standard, in cazul
+	in care se fac redirectari. Se executa apoi intern cd folosind chdir.
+	- Daca cd nu are paramentru nu se intampla nimic.
+	- Pentru exit si quit se intoarce SHELL_EXIT.
+	
+Redirectari:
+	- Se verifica pe rand daca trebuie redirectat STDIN, STDOUT sau STDERR.
+	- Daca exista mai multe redirectari de acelasi tip se va lua doar primul
+	in calcul (de ex. ls >out1 >out2).
+	- Pentru stdout si stderr se verifica daca este necesar modul append.
+	- Pentru stderr se verifica mai intai daca fisierul coincide cu cel pentru
+	stdout.
+	
+Variabile de mediu:
+	- Se obtine comanda cu get_word si se verfica daca este o definitie de
+	variabila, folosind strchr.
+	- Se separa numele de valoare folosind strtok.
+
+Operatori:
+	- Pentru operatorii conditionali se verifica mai intai rezultatul intors de
+	prima comanda.
+	- Pentru operatorul secvential se executa comenzile in ordine si se
+	intoarce rezultatul ultimei comenzi.
+	- Pentru operatorul pipe se creeaza un pipe si 2 procese copil si se
+	executa cate o comanda in fiecare copil. Dupa executia comenzii copilul
+	este inchis. Este intors rezultatul ultimei	comenzi.
+	- Pentru operatorul paralel se creeaza 2 copii folosind fork si executa
+	cele 2 comenzi. Dupa executia comenzii copilul este inchis.
+	Comanda se executa cu succes daca macar un copil se termina cu succes.

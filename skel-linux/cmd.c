@@ -21,14 +21,10 @@
 #define READ		0
 #define WRITE		1
 
-#define IN		0
-#define OUT		1
-#define ERR		2
-
 /**
  * Internal change-directory command.
  */
-static bool shell_cd(word_t *dir)
+static int shell_cd(word_t *dir)
 {
 	int status;
 	char *path;
@@ -36,7 +32,7 @@ static bool shell_cd(word_t *dir)
 	path = get_word(dir);
 
 	if (path == NULL)
-		return true;
+		return 0;
 
 	status = chdir(path);
 
@@ -44,7 +40,7 @@ static bool shell_cd(word_t *dir)
 	 * Return TRUE if no errors
 	 */
 	free(path);
-	return status == 0;
+	return status;
 }
 
 /**
@@ -75,8 +71,8 @@ static void safe_dup2(int oldfd, int newfd)
 /**
  * Redirect standard file descriptors
  */
- static void do_redirect(simple_command_t *s)
- {
+static void do_redirect(simple_command_t *s)
+{
 	int mode;
 	int fd_in, fd_out, fd_err, rc;
 	char *input, *output, *err;
@@ -178,7 +174,7 @@ static int parse_simple(simple_command_t *s, int level, command_t *father)
 	 */
 	status = SHELL_EXIT;
 	if (s == NULL)
-		return false;
+		return SHELL_EXIT;
 
 	cmd = get_word(s->verb);
 
@@ -211,11 +207,6 @@ static int parse_simple(simple_command_t *s, int level, command_t *father)
 		safe_dup2(fd_out, STDOUT_FILENO);
 		safe_dup2(fd_err, STDERR_FILENO);
 
-		/* TODO err handling */
-		close(fd_in);
-		close(fd_out);
-		close(fd_err);
-
 		free(cmd);
 		return status;
 	}
@@ -235,7 +226,7 @@ static int parse_simple(simple_command_t *s, int level, command_t *father)
 
 		free(tmp);
 		free(cmd);
-		return status == 0;
+		return status;
 	}
 
 	/*
@@ -261,7 +252,7 @@ static int parse_simple(simple_command_t *s, int level, command_t *father)
 		 */
 		fprintf(stderr, "Execution failed for '%s'\n", cmd);
 		free(cmd);
-		exit(-1);
+		exit(EXIT_FAILURE);
 	default:
 		break;
 	}
@@ -269,59 +260,64 @@ static int parse_simple(simple_command_t *s, int level, command_t *father)
 
 	free(cmd);
 
-	/*
-	 * Return TRUE if no errors.
-	 */
-	return status == 0;
+	return WEXITSTATUS(status);
 }
 
 /**
  * Process two commands in parallel, by creating two children.
  */
-static bool do_in_parallel(command_t *cmd1, command_t *cmd2, int level,
+static int do_in_parallel(command_t *cmd1, command_t *cmd2, int level,
 		command_t *father)
 {
 	int pid1, pid2;
 	int status1, status2;
 
+	/*
+	 * Execute the first command
+	 */
 	pid1 = fork();
 	switch (pid1) {
 	case -1:
 		return SHELL_EXIT;
 	case 0:
 		status1 = parse_command(cmd1, level, father);
-		exit(-1 * status1);
+		exit(status1);
 	default:
 		break;
 	}
 
+	/*
+	 * Execute the second command
+	 */
 	pid2 = fork();
 	switch (pid2) {
 	case -1:
 		return SHELL_EXIT;
 	case 0:
 		status2 = parse_command(cmd2, level, father);
-		exit(-1 * status2);
+		exit(status2);
 	default:
 		break;
 	}
 
 	waitpid(pid1, &status1, 0);
 	waitpid(pid2, &status2, 0);
-	return status1 == 0 && status2 == 0;
+	return WEXITSTATUS(status1) && WEXITSTATUS(status2);
 }
 
 /**
  * Run commands by creating an anonymous pipe (cmd1 | cmd2)
  */
-static bool do_on_pipe(command_t *cmd1, command_t *cmd2, int level,
+static int do_on_pipe(command_t *cmd1, command_t *cmd2, int level,
 		command_t *father)
 {
 	int fds[2];
 	int pid1, pid2;
 	int status1, status2;
 
-	/* TODO redirect the output of cmd1 to the input of cmd2 */
+	/*
+	 * Create a new pipe
+	 */
 	pipe(fds);
 
 	pid1 = fork();
@@ -329,11 +325,17 @@ static bool do_on_pipe(command_t *cmd1, command_t *cmd2, int level,
 	case -1:
 		return SHELL_EXIT;
 	case 0:
+		/*
+		 * Redirect output to pipe and close the other end
+		 */
 		safe_dup2(fds[1], STDOUT_FILENO);
-		//close(fds[0]);
 		close(fds[0]);
+
+		/*
+		 * Execute the command
+		 */
 		status1 = parse_command(cmd1, level, father);
-		exit(status1 - 1);
+		exit(status1);
 	default:
 		break;
 	}
@@ -343,22 +345,31 @@ static bool do_on_pipe(command_t *cmd1, command_t *cmd2, int level,
 	case -1:
 		return SHELL_EXIT;
 	case 0:
+		/*
+		 * Get input from pipe and close the other end
+		 */
 		safe_dup2(fds[0], STDIN_FILENO);
 		close(fds[1]);
+
+		/*
+		 * Execute the command
+		 */
 		status2 = parse_command(cmd2, level, father);
-		exit(status2 - 1);
+		exit(status2);
 	default:
 		break;
 	}
 
+	/*
+	 * Close the pipe in parent
+	 */
 	close(fds[0]);
 	close(fds[1]);
 
 	waitpid(pid1, &status1, 0);
 	waitpid(pid2, &status2, 0);
 
-
-	return status2 == 0;
+	return WEXITSTATUS(status2);
 }
 
 /**
@@ -372,14 +383,13 @@ int parse_command(command_t *c, int level, command_t *father)
 	 * Sanity checks
 	 */
 	if (c == NULL)
-		return false;
+		return SHELL_EXIT;
 
 	/*
 	 * Execute a simple command
 	 */
-	if (c->op == OP_NONE) {
+	if (c->op == OP_NONE)
 		return parse_simple(c->scmd, level, father);
-	}
 
 	switch (c->op) {
 	case OP_SEQUENTIAL:
@@ -391,6 +401,9 @@ int parse_command(command_t *c, int level, command_t *father)
 		break;
 
 	case OP_PARALLEL:
+		/*
+		 * Execute 2 commands in parallel
+		 */
 		status = do_in_parallel(c->cmd1, c->cmd2, level, father);
 		break;
 
@@ -400,7 +413,7 @@ int parse_command(command_t *c, int level, command_t *father)
 		 * the first fails.
 		 */
 		status = parse_command(c->cmd1, level + 1, c);
-		if (!status)
+		if (status != 0)
 			status = parse_command(c->cmd2, level + 1, c);
 		break;
 
@@ -410,11 +423,14 @@ int parse_command(command_t *c, int level, command_t *father)
 		 * the first succeeds,
 		 */
 		status = parse_command(c->cmd1, level + 1, c);
-		if (status && status != SHELL_EXIT)
+		if (status == 0)
 			status = parse_command(c->cmd2, level + 1, c);
 		break;
 
 	case OP_PIPE:
+		/*
+		 * Pipe commands
+		 */
 		status = do_on_pipe(c->cmd1, c->cmd2, level + 1, c);
 		break;
 
