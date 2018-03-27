@@ -32,7 +32,7 @@ source "$TEST_LIB"
 SHELL_PROMPT="> "
 
 # change this of you want to keep the logs after execution
-DO_CLEANUP=yes
+DO_CLEANUP=no
 
 BUFFERING_WRAPPER=""
 which stdbuf &> /dev/null
@@ -41,7 +41,7 @@ if [ $? -eq 0 ]; then
 	BUFFERING_WRAPPER="stdbuf -i 0"
 fi
 
-USE_VALGRIND=no
+USE_VALGRIND=yes
 VALGRIND_LOG="valgrind.log"
 
 

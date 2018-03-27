@@ -1,0 +1,17 @@
+==6951== Memcheck, a memory error detector
+==6951== Copyright (C) 2002-2015, and GNU GPL'd, by Julian Seward et al.
+==6951== Using Valgrind-3.11.0 and LibVEX; rerun with -h for copyright info
+==6951== Command: mini-shell
+==6951== Parent PID: 6950
+==6951== 
+==6951== 
+==6951== FILE DESCRIPTORS: 0 open at exit.
+==6951== 
+==6951== HEAP SUMMARY:
+==6951==     in use at exit: 0 bytes in 0 blocks
+==6951==   total heap usage: 267 allocs, 267 frees, 23,167 bytes allocated
+==6951== 
+==6951== All heap blocks were freed -- no leaks are possible
+==6951== 
+==6951== For counts of detected and suppressed errors, rerun with: -v
+==6951== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
